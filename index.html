@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>Lomnao Shop</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: url("https://cdn.phototourl.com/uploads/2026-01-22-63a4272b-bc3b-45de-9a0d-c354c66a9dc7.jpg") no-repeat center center fixed;
+      background-size: cover;
+      color: white;
+    }
+    .overlay {
+      background: rgba(0,0,0,0.7);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    h1, h2, h3 {
+      text-align: center;
+    }
+    .container {
+      max-width: 800px;
+      margin: auto;
+      background: rgba(0,0,0,0.8);
+      padding: 20px;
+      border-radius: 10px;
+    }
+    input, button, textarea {
+      width: 100%;
+      padding: 10px;
+      margin: 5px 0;
+      border-radius: 5px;
+      border: none;
+    }
+    button {
+      background: #00c853;
+      color: black;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #00e676;
+    }
+    .product {
+      border: 1px solid #444;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 5px;
+    }
+    .admin-only {
+      background: #ff5252;
+      color: white;
+      margin-top: 5px;
+    }
+    .hidden {
+      display: none;
+    }
+    .credit {
+      text-align: center;
+      margin-top: 30px;
+      font-size: 14px;
+      opacity: 0.8;
+    }
+    .log-box {
+      max-height: 200px;
+      overflow-y: auto;
+      background: #111;
+      padding: 10px;
+      border-radius: 5px;
+      font-size: 12px;
+    }
+    .link-btn {
+      background: #2196f3;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay">
+    <div class="container">
+      <h1>🛒 Lomnao Shop</h1>
+
+      <!-- Login Section -->
+      <div id="loginSection">
+        <h2>เข้าสู่ระบบ</h2>
+        <input type="email" id="loginEmail" placeholder="อีเมล" />
+        <input type="password" id="loginPassword" placeholder="รหัสผ่าน" />
+        <button onclick="login()">เข้าสู่ระบบ</button>
+        <button class="link-btn" onclick="showRegister()">สมัครสมาชิก</button>
+        <p id="loginMessage"></p>
+      </div>
+
+      <!-- Register Section -->
+      <div id="registerSection" class="hidden">
+        <h2>สมัครสมาชิก</h2>
+        <input type="text" id="registerUsername" placeholder="ชื่อผู้ใช้ (username)" />
+        <input type="email" id="registerEmail" placeholder="อีเมล" />
+        <input type="password" id="registerPassword" placeholder="รหัสผ่าน" />
+        <input type="password" id="registerPasswordConfirm" placeholder="ยืนยันรหัสผ่านอีกครั้ง" />
+        <button onclick="register()">สมัครสมาชิก</button>
+        <button class="link-btn" onclick="showLogin()">กลับไปหน้าเข้าสู่ระบบ</button>
+        <p id="registerMessage"></p>
+      </div>
+
+      <!-- Main Section -->
+      <div id="mainSection" class="hidden">
+        <h2 id="welcomeText"></h2>
+        <button onclick="logout()">ออกจากระบบ</button>
+
+        <!-- Add Product (Admin Only) -->
+        <div id="addProductSection" class="hidden">
+          <h3>➕ เพิ่มสินค้า (เฉพาะแอดมิน)</h3>
+          <input type="text" id="productName" placeholder="ชื่อสินค้า" />
+          <textarea id="productDetail" placeholder="รายละเอียดสินค้า"></textarea>
+          <input type="text" id="productLink" placeholder="ลิงก์ / ไอดีเกม" />
+          <button onclick="addProduct()">เพิ่มสินค้า</button>
+        </div>
+
+        <h3>📦 รายการสินค้า</h3>
+        <div id="productList"></div>
+
+        <!-- Admin Logs -->
+        <div id="adminLogSection" class="hidden">
+          <h3>📜 ประวัติการเข้าใช้งาน (แอดมิน)</h3>
+          <div id="logBox" class="log-box"></div>
+          <button onclick="downloadLogs()">ดาวน์โหลดประวัติ (.txt)</button>
+        </div>
+      </div>
+
+      <div class="credit">
+        เว็บไซต์นี้พัฒนาโดย <b>lomnao</b>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 🔧 ใส่ config ของ Firebase ของคุณตรงนี้
+    const firebaseConfig = {
+      apiKey: "ใส่_apiKey_ของคุณ",
+      authDomain: "ใส่_authDomain_ของคุณ",
+      projectId: "ใส่_projectId_ของคุณ",
+      storageBucket: "ใส่_storageBucket_ของคุณ",
+      messagingSenderId: "ใส่_messagingSenderId_ของคุณ",
+      appId: "ใส่_appId_ของคุณ"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    const ADMIN_USERNAME = "lomnao";
+
+    const loginSection = document.getElementById("loginSection");
+    const registerSection = document.getElementById("registerSection");
+    const mainSection = document.getElementById("mainSection");
+    const welcomeText = document.getElementById("welcomeText");
+    const addProductSection = document.getElementById("addProductSection");
+    const productList = document.getElementById("productList");
+    const adminLogSection = document.getElementById("adminLogSection");
+    const logBox = document.getElementById("logBox");
+
+    function showRegister() {
+      loginSection.classList.add("hidden");
+      registerSection.classList.remove("hidden");
+    }
+
+    function showLogin() {
+      registerSection.classList.add("hidden");
+      loginSection.classList.remove("hidden");
+    }
+
+    function login() {
+      const email = document.getElementById("loginEmail").value;
+      const password = document.getElementById("loginPassword").value;
+      auth.signInWithEmailAndPassword(email, password)
+        .then(userCredential => {
+          if (!userCredential.user.emailVerified) {
+            alert("กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ");
+            auth.signOut();
+            return;
+          }
+          document.getElementById("loginMessage").innerText = "เข้าสู่ระบบสำเร็จ";
+        })
+        .catch(error => {
+          document.getElementById("loginMessage").innerText = error.message;
+        });
+    }
+
+    function register() {
+      const username = document.getElementById("registerUsername").value;
+      const email = document.getElementById("registerEmail").value;
+      const password = document.getElementById("registerPassword").value;
+      const confirmPassword = document.getElementById("registerPasswordConfirm").value;
+
+      if (!username || !email || !password || !confirmPassword) {
+        document.getElementById("registerMessage").innerText = "กรุณากรอกข้อมูลให้ครบทุกช่อง";
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        document.getElementById("registerMessage").innerText = "รหัสผ่านทั้งสองช่องไม่ตรงกัน";
+        return;
+      }
+
+      auth.createUserWithEmailAndPassword(email, password)
+        .then(userCredential => {
+          const user = userCredential.user;
+
+          // ส่งอีเมลยืนยัน
+          user.sendEmailVerification();
+
+          // บันทึกข้อมูลผู้ใช้ลง Firestore
+          return db.collection("users").doc(user.uid).set({
+            username: username,
+            email: email,
+            role: username === ADMIN_USERNAME ? "admin" : "user",
+            createdAt: new Date()
+          });
+        })
+        .then(() => {
+          document.getElementById("registerMessage").innerText =
+            "สมัครสมาชิกสำเร็จ! กรุณาไปยืนยันอีเมลก่อนเข้าสู่ระบบ";
+          auth.signOut();
+        })
+        .catch(error => {
+          document.getElementById("registerMessage").innerText = error.message;
+        });
+    }
+
+    function logout() {
+      auth.signOut();
+    }
+
+    auth.onAuthStateChanged(user => {
+      if (user && user.emailVerified) {
+        loginSection.classList.add("hidden");
+        registerSection.classList.add("hidden");
+        mainSection.classList.remove("hidden");
+
+        const email = user.email;
+
+        db.collection("users").doc(user.uid).get().then(doc => {
+          if (doc.exists) {
+            const userData = doc.data();
+            const username = userData.username;
+            welcomeText.innerText = "สวัสดี " + username;
+
+            // บันทึก log การเข้าใช้งาน
+            db.collection("logs").add({
+              username: username,
+              email: email,
+              time: new Date().toLocaleString()
+            });
+
+            if (username === ADMIN_USERNAME) {
+              addProductSection.classList.remove("hidden");
+              adminLogSection.classList.remove("hidden");
+              loadLogs();
+            }
+          }
+        });
+
+        loadProducts();
+      } else {
+        loginSection.classList.remove("hidden");
+        mainSection.classList.add("hidden");
+      }
+    });
+
+    function addProduct() {
+      const name = document.getElementById("productName").value;
+      const detail = document.getElementById("productDetail").value;
+      const link = document.getElementById("productLink").value;
+
+      if (!name || !detail || !link) {
+        alert("กรุณากรอกข้อมูลให้ครบ");
+        return;
+      }
+
+      db.collection("products").add({
+        name: name,
+        detail: detail,
+        link: link,
+        createdAt: new Date()
+      }).then(() => {
+        document.getElementById("productName").value = "";
+        document.getElementById("productDetail").value = "";
+        document.getElementById("productLink").value = "";
+        loadProducts();
+      });
+    }
+
+    function loadProducts() {
+      productList.innerHTML = "";
+      db.collection("products").orderBy("createdAt", "desc").get().then(snapshot => {
+        snapshot.forEach(doc => {
+          const product = doc.data();
+          const div = document.createElement("div");
+          div.className = "product";
+
+          div.innerHTML = `
+            <h4>${product.name}</h4>
+            <p>${product.detail}</p>
+            <p><b>ลิงก์/ไอดี:</b> ${product.link}</p>
+          `;
+
+          // เช็คแอดมินเพื่อแสดงปุ่มลบ/แก้ไข
+          const user = auth.currentUser;
+          if (user) {
+            db.collection("users").doc(user.uid).get().then(userDoc => {
+              if (userDoc.exists) {
+                const username = userDoc.data().username;
+                if (username === ADMIN_USERNAME) {
+                  const editBtn = document.createElement("button");
+                  editBtn.innerText = "✏️ แก้ไข";
+                  editBtn.className = "admin-only";
+                  editBtn.onclick = () => editProduct(doc.id, product);
+
+                  const deleteBtn = document.createElement("button");
+                  deleteBtn.innerText = "🗑️ ลบ";
+                  deleteBtn.className = "admin-only";
+                  deleteBtn.onclick = () => deleteProduct(doc.id);
+
+                  div.appendChild(editBtn);
+                  div.appendChild(deleteBtn);
+                }
+              }
+            });
+          }
+
+          productList.appendChild(div);
+        });
+      });
+    }
+
+    function editProduct(id, product) {
+      const newName = prompt("แก้ไขชื่อสินค้า:", product.name);
+      if (!newName) return;
+      const newDetail = prompt("แก้ไขรายละเอียด:", product.detail);
+      if (!newDetail) return;
+      const newLink = prompt("แก้ไขลิงก์/ไอดี:", product.link);
+      if (!newLink) return;
+
+      db.collection("products").doc(id).update({
+        name: newName,
+        detail: newDetail,
+        link: newLink
+      }).then(loadProducts);
+    }
+
+    function deleteProduct(id) {
+      if (confirm("คุณแน่ใจหรือไม่ว่าต้องการลบสินค้านี้?")) {
+        db.collection("products").doc(id).delete().then(loadProducts);
+      }
+    }
+
+    function loadLogs() {
+      logBox.innerHTML = "";
+      db.collection("logs").orderBy("time", "desc").limit(100).get().then(snapshot => {
+        snapshot.forEach(doc => {
+          const log = doc.data();
+          const p = document.createElement("p");
+          p.innerText = `${log.time} | ${log.username} | ${log.email}`;
+          logBox.appendChild(p);
+        });
+      });
+    }
+
+    function downloadLogs() {
+      db.collection("logs").orderBy("time", "desc").get().then(snapshot => {
+        let text = "ประวัติการเข้าใช้งาน Lomnao Shop\n\n";
+        snapshot.forEach(doc => {
+          const log = doc.data();
+          text += `${log.time} | ${log.username} | ${log.email}\n`;
+        });
+
+        const blob = new Blob([text], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "login_logs.txt";
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    }
+  </script>
+</body>
+</html>
